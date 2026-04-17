@@ -1,0 +1,10 @@
+#!/bin/bash
+set -m
+/data/panda/init-jedi
+/data/panda/run-jedi-crons &
+
+if [[ -z "${PANDA_NO_ROOT}" ]]; then
+  runuser -u atlpan -g zp -- /etc/rc.d/init.d/panda-jedi start
+else
+  /etc/rc.d/init.d/panda-jedi start
+fi

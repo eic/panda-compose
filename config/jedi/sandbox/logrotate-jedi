@@ -1,0 +1,12 @@
+/var/log/panda/*log {
+    rotate 3
+    daily
+    compress
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+	/etc/rc.d/init.d/panda-jedi stop >> /var/log/panda/panda-jedi_logrotate.log 2>/dev/null || true
+	/etc/rc.d/init.d/panda-jedi start >> /var/log/panda/panda-jedi_logrotate.log 2>/dev/null || true
+    endscript
+}

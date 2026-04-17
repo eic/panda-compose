@@ -1,0 +1,6 @@
+#!/bin/bash
+# Simplified init-jedi for local development / CI
+# Skips ATLAS CRIC/CA/schedconfig steps that require external network access.
+
+mkdir -p /var/log/panda/jedilog
+chmod -R 777 /var/log/panda || true

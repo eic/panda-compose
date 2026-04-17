@@ -1,0 +1,26 @@
+{
+    "mb_servers": {
+        "internal_mb": {
+            "host_port_list": ["${PANDA_ACTIVEMQ_LIST}"],
+            "use_ssl": false,
+            "cert_file": null,
+            "key_file": null,
+            "username": "jedi",
+            "passcode": "${PANDA_ACTIVEMQ_PASSWD_jedi}"
+        }
+    },
+    "queues": {
+        "jedi_taskstatus": {
+            "server": "internal_mb",
+            "destination": "/queue/self.jedi_taskstatus"
+        },
+	        "jedi_contents_feeder": {
+            "server": "internal_mb",
+            "destination": "/queue/jedi_contents_feeder"
+        },
+        "jedi_job_generator": {
+            "server": "internal_mb",
+            "destination": "/queue/jedi_job_generator"
+        }
+    }
+}

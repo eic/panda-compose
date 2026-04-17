@@ -1,0 +1,59 @@
+{
+    "mb_servers": {
+        "iDDS_mb": {
+            "host_port_list": ["${PANDA_ACTIVEMQ_LIST}"],
+            "use_ssl": false,
+            "cert_file": null,
+            "key_file": null,
+            "username": "panda",
+            "passcode": "${PANDA_ACTIVEMQ_PASSWD_panda}",
+            "verbose": true
+        },
+        "panda_mb": {
+            "host_port_list": ["${PANDA_ACTIVEMQ_LIST}"],
+            "use_ssl": false,
+            "cert_file": null,
+            "key_file": null,
+            "username": "panda",
+            "passcode": "${PANDA_ACTIVEMQ_PASSWD_panda}",
+            "verbose": true
+        },
+        "internal_mb": {
+            "host_port_list": ["${PANDA_ACTIVEMQ_LIST}"],
+            "use_ssl": false,
+            "cert_file": null,
+            "key_file": null,
+            "username": "panda",
+            "passcode": "${PANDA_ACTIVEMQ_PASSWD_panda}",
+            "vhost": "/",
+            "verbose": true
+        },
+        "pilot_mb": {
+            "host_port_list": ["${PANDA_ACTIVEMQ_LIST}"],
+            "use_ssl": false,
+            "cert_file": null,
+            "key_file": null,
+            "username": "panda",
+            "passcode": "${PANDA_ACTIVEMQ_PASSWD_panda}",
+            "verbose": true
+        }
+    },
+    "queues": {
+        "panda_jobstatus": {
+            "server": "iDDS_mb",
+            "destination": "/topic/panda_idds"
+        },
+        "panda_jedi": {
+            "server": "panda_mb",
+            "destination": "/queue/panda_jedi"
+        },
+        "panda_pilot_queue_1": {
+            "server": "pilot_mb",
+            "destination": "/queue/panda_pilot"
+        },
+        "panda_pilot_topic_1": {
+            "server": "pilot_mb",
+            "destination": "/topic/panda_pilot"
+        }
+    }
+}

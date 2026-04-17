@@ -20,34 +20,40 @@ services:
     image: ghcr.io/pandawms/panda-database:latest
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${PANDA_DB_USER:-panda}
-      POSTGRES_PASSWORD: ${PANDA_DB_PASSWORD:-panda_secret}
+      # The init script (panda_db_init.sh) connects as 'postgres' superuser.
+      # It creates the 'panda' role using PANDA_DB_PASSWORD.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secret}
       POSTGRES_DB: ${PANDA_DB_NAME:-panda_db}
+      PANDA_DB_PASSWORD: ${PANDA_DB_PASSWORD:-panda_secret}
     volumes:
       - panda-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PANDA_DB_USER:-panda} -d ${PANDA_DB_NAME:-panda_db}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${PANDA_DB_NAME:-panda_db}"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   # ────────────────────────────────────────────────────────────────
   # ActiveMQ — message broker for PanDA server ↔ JEDI communication
+  # The image CMD defaults to "sleep infinity"; override to start broker.
+  # No JAAS auth in dev — default config accepts any STOMP credentials.
   # ────────────────────────────────────────────────────────────────
   activemq:
     image: ghcr.io/pandawms/panda-activemq:latest
     restart: unless-stopped
+    command: ["/opt/activemq/bin/run-activemq-services"]
     environment:
-      ACTIVEMQ_PASSWD_panda: ${PANDA_ACTIVEMQ_PASSWD_panda:-panda_mq_secret}
-      ACTIVEMQ_PASSWD_jedi: ${PANDA_ACTIVEMQ_PASSWD_jedi:-jedi_mq_secret}
+      # Disable JDK 18 cgroup v2 detection bug (JDK-8281631) that crashes the JVM
+      JAVA_TOOL_OPTIONS: "-XX:-UseContainerSupport"
     ports:
       - "61613:61613"   # STOMP (used by panda-server / harvester)
       - "61616:61616"   # OpenWire
       - "8161:8161"     # Web console (admin)
     volumes:
-      - activemq-data:/opt/activemq/data
+      - activemq-data:/appdata/activemq
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8161/admin/ -u admin:admin || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 61613"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -56,10 +62,30 @@ services:
   # PanDA server + JEDI (unified image)
   # HTTP  → localhost:25080
   # HTTPS → localhost:25443
+  #
+  # The image CMD defaults to "sleep infinity". We mirror the k8s
+  # statefulset startup pattern: copy sandbox scripts to /data/panda/,
+  # run process_template.py to expand ${VAR} in *.template files,
+  # then start httpd via run-panda-services.
   # ────────────────────────────────────────────────────────────────
   panda-server:
     image: ghcr.io/pandawms/panda-server:latest
     restart: unless-stopped
+    command:
+      - /bin/bash
+      - -c
+      - |
+        cp /opt/panda/sandbox/* /data/panda/
+        chmod +x /data/panda/init-panda /data/panda/run-panda-crons /data/panda/run-panda-services
+        mkdir -p /var/log/panda/pandacache/jedilog
+        chmod -R 777 /var/log/panda/pandacache || true
+        if [ -f /opt/panda/sandbox/panda_server-httpd.conf ]; then
+          mv /opt/panda/etc/panda/panda_server-httpd.conf /opt/panda/etc/panda/panda_server-httpd.conf.back || true
+          ln -sf /opt/panda/sandbox/panda_server-httpd.conf /opt/panda/etc/panda/panda_server-httpd.conf
+        fi
+        /opt/panda/bin/python /data/panda/process_template.py
+        /data/panda/run-panda-services
+        sleep infinity & wait
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,21 +108,31 @@ services:
       PANDA_ACTIVEMQ_LIST: ${PANDA_ACTIVEMQ_LIST:-activemq:61613}
       PANDA_ACTIVEMQ_PASSWD_panda: ${PANDA_ACTIVEMQ_PASSWD_panda:-panda_mq_secret}
       PANDA_ACTIVEMQ_PASSWD_jedi: ${PANDA_ACTIVEMQ_PASSWD_jedi:-jedi_mq_secret}
-      # Server
+      # Server — run as current user to avoid atlpan/zp user-switching in Docker
+      PANDA_NO_ROOT: "1"
       PANDA_AUTH: ${PANDA_AUTH:-None}
       PANDA_VERIFY_HOST: "off"
       PANDA_BEHIND_REAL_LB: "1"
+      PANDA_SERVER_CONF_PORT: ${PANDA_SERVER_CONF_PORT:-80}
+      PANDA_SERVER_CONF_MIN_WORKERS: ${PANDA_SERVER_CONF_MIN_WORKERS:-1}
+      PANDA_SERVER_CONF_MAX_WORKERS: ${PANDA_SERVER_CONF_MAX_WORKERS:-4}
+      PANDA_SERVER_CONF_MAX_CONNECTIONS: ${PANDA_SERVER_CONF_MAX_CONNECTIONS:-200}
+      PANDA_SERVER_CONF_THREADS_PER_CHILD: ${PANDA_SERVER_CONF_THREADS_PER_CHILD:-1}
+      PANDA_SERVER_CONF_MAX_BACKLOG: ${PANDA_SERVER_CONF_MAX_BACKLOG:-511}
+      PANDA_SERVER_CONF_SERVERNAME: ${PANDA_SERVER_CONF_SERVERNAME:-localhost}
+      PANDA_SERVER_CONF_NUM_WSGI: ${PANDA_SERVER_CONF_NUM_WSGI:-2}
+      PANDA_SERVER_CONF_NUM_WSGI_THREAD: ${PANDA_SERVER_CONF_NUM_WSGI_THREAD:-1}
       # Proxy (optional)
       http_proxy: ${HTTP_PROXY:-}
       https_proxy: ${HTTPS_PROXY:-}
     volumes:
       - ./config/panda/panda_common.cfg:/etc/panda/panda_common.cfg:ro
       - ./config/panda/panda_server.cfg:/etc/panda/panda_server.cfg:ro
+      - ./config/panda/sandbox:/opt/panda/sandbox:ro
       - panda-server-logs:/var/log/panda
       - panda-cache:/var/cache/pandaserver
     ports:
       - "25080:80"    # HTTP — used by panda-client
-      - "25443:443"   # HTTPS
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:80/server/panda/isAlive | grep -q 'alive=yes' || exit 1"]
       interval: 20s
@@ -106,10 +142,20 @@ services:
 
   # ────────────────────────────────────────────────────────────────
   # PanDA JEDI — workload management daemon
+  # Same sandbox startup pattern as panda-server.
   # ────────────────────────────────────────────────────────────────
   panda-jedi:
     image: ghcr.io/pandawms/panda-jedi:latest
     restart: unless-stopped
+    command:
+      - /bin/bash
+      - -c
+      - |
+        cp /opt/panda/sandbox/* /data/panda/
+        chmod +x /data/panda/init-jedi /data/panda/run-jedi-crons /data/panda/run-jedi-services
+        /opt/panda/bin/python /data/panda/process_template.py
+        /data/panda/run-jedi-services
+        sleep infinity & wait
     depends_on:
       panda-server:
         condition: service_healthy
@@ -128,6 +174,7 @@ services:
       PANDA_ACTIVEMQ_LIST: ${PANDA_ACTIVEMQ_LIST:-activemq:61613}
       PANDA_ACTIVEMQ_PASSWD_panda: ${PANDA_ACTIVEMQ_PASSWD_panda:-panda_mq_secret}
       PANDA_ACTIVEMQ_PASSWD_jedi: ${PANDA_ACTIVEMQ_PASSWD_jedi:-jedi_mq_secret}
+      PANDA_NO_ROOT: "1"
       PANDA_URL: ${PANDA_URL:-http://panda-server:80/server/panda}
       PANDA_URL_SSL: ${PANDA_URL_SSL:-https://panda-server:443/server/panda}
       PANDA_VERIFY_HOST: "off"
@@ -135,7 +182,14 @@ services:
       https_proxy: ${HTTPS_PROXY:-}
     volumes:
       - ./config/panda/panda_jedi.cfg:/etc/panda/panda_jedi.cfg:ro
+      - ./config/jedi/sandbox:/opt/panda/sandbox:ro
       - panda-jedi-logs:/var/log/panda
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/run/panda/panda_jedi.pid && kill -0 $(cat /var/run/panda/panda_jedi.pid) 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   # ────────────────────────────────────────────────────────────────
   # MariaDB — Harvester database
