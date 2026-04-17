@@ -34,7 +34,13 @@ jobs:
           docker compose logs harvester --tail=20
 
       - name: Install panda-client
-        run: pip install panda-client
+        run: |
+          git clone https://github.com/PanDAWMS/panda-client.git /tmp/panda-client-src
+          cd /tmp/panda-client-src
+          python3 setup.py install --prefix=/tmp/panda-install
+          PANDA_PYPATH=$(find /tmp/panda-install -name "pandaclient" -type d | head -1 | xargs dirname)
+          echo "PYTHONPATH=${PANDA_PYPATH}${PYTHONPATH:+:$PYTHONPATH}" >> $GITHUB_ENV
+          echo "/tmp/panda-install/bin" >> $GITHUB_PATH
 
       - name: Integration test — submit, status, kill
         env:
