@@ -35,12 +35,12 @@ jobs:
 
       - name: Install panda-client
         run: |
-          git clone https://github.com/PanDAWMS/panda-client.git /tmp/panda-client
-          cd /tmp/panda-client
-          python3 setup.py install --prefix=$HOME/.local
-          PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-          echo "PYTHONPATH=$HOME/.local/lib/python${PYTHON_VERSION}/site-packages${PYTHONPATH:+:$PYTHONPATH}" >> $GITHUB_ENV
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          git clone https://github.com/PanDAWMS/panda-client.git /tmp/panda-client-src
+          cd /tmp/panda-client-src
+          python3 setup.py install --prefix=/tmp/panda-install
+          PANDA_PYPATH=$(find /tmp/panda-install -name "pandaclient" -type d | head -1 | xargs dirname)
+          echo "PYTHONPATH=${PANDA_PYPATH}${PYTHONPATH:+:$PYTHONPATH}" >> $GITHUB_ENV
+          echo "/tmp/panda-install/bin" >> $GITHUB_PATH
 
       - name: Integration test — submit, status, kill
         env:
