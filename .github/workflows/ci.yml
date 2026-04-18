@@ -33,12 +33,14 @@ jobs:
           docker compose ps harvester
           docker compose logs harvester --tail=20
 
-      - name: Set up Python 
+      - name: Set up Python
         uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
 
       - name: Install panda-client
         run: |
-          pip install panda-client
+          python -m pip install panda-client
 
       - name: Integration test — submit, status, kill
         env:
