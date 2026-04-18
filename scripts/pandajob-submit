@@ -35,7 +35,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="Submit a job script to PanDA")
     p.add_argument("--site", required=True, help="PanDA compute site (queue name)")
     p.add_argument("--script", required=True, help="Path to the job script to execute")
-    p.add_argument("--name", default="jacamar-ci-job", help="Job name")
+    p.add_argument("--name", default="panda-compose-job", help="Job name")
     p.add_argument("--cores", type=int, default=1, help="Number of CPU cores")
     p.add_argument("--memory", type=int, default=2000, help="Memory in MB")
     p.add_argument("--walltime", type=int, default=3600, help="Walltime in seconds")
@@ -56,7 +56,7 @@ def main():
     job.transformation = "/bin/bash"
     job.jobParameters = script_path
     job.prodSourceLabel = "test"
-    job.processingType = "jacamar-ci"
+    job.processingType = "panda-compose"
     job.maxCpuCount = args.cores
     job.minRamCount = args.memory
     job.maxDiskCount = 1000

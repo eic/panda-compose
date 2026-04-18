@@ -1,8 +1,8 @@
 # panda-compose
 
 A self-contained Docker Compose stack for running a local PanDA workload management
-system. Designed for development and CI testing — in particular for developing and
-testing the [jacamar-ci](https://gitlab.com/ecp-ci/jacamar-ci) PanDA executor.
+system. Designed for development and CI testing of tools that integrate with PanDA,
+such as CI executors, workflow managers, and custom Harvester plugins.
 
 This repository mirrors the component set of
 [panda-k8s](https://github.com/PanDAWMS/panda-k8s) but expressed as a single
@@ -81,11 +81,11 @@ This repository intentionally reuses the same container images and environment v
 names as [panda-k8s](https://github.com/PanDAWMS/panda-k8s). If you need a production-
 grade deployment, follow the panda-k8s Helm chart instructions instead.
 
-## Developing the jacamar-ci PanDA executor
+## Developing against the PanDA stack
 
-Point `panda_url` in your jacamar-ci TOML config at `http://localhost:25080/server/panda`
-and use the `PANDA_COMPOSE_LOCAL` queue name. See the jacamar-ci PanDA executor
-documentation for full configuration details.
+Point your tool's PanDA URL at `http://localhost:25080/server/panda` and use the
+`PANDA_COMPOSE_LOCAL` queue name. The dev stack uses no-auth mode (`PANDA_AUTH=None`),
+so no token or certificate is required for local development.
 
 ## Submitting and managing jobs
 
@@ -121,7 +121,7 @@ echo "Submitted PanDA job $JOB_ID"
 |---|---|
 | `--site SITE` | PanDA compute site / queue name (e.g. `TEST_SITE`, `PANDA_COMPOSE_LOCAL`) |
 | `--script PATH` | Path to the shell script to execute |
-| `--name NAME` | Human-readable job name (default: `jacamar-ci-job`) |
+| `--name NAME` | Human-readable job name (default: `panda-compose-job`) |
 | `--cores N` | CPU cores requested (default: 1) |
 | `--memory MB` | Memory in MB (default: 2000) |
 | `--walltime S` | Wall-clock limit in seconds (default: 3600) |
