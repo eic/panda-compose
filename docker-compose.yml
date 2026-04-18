@@ -195,7 +195,7 @@ services:
   # MariaDB — Harvester database
   # ────────────────────────────────────────────────────────────────
   mariadb:
-    image: bitnami/mariadb:latest
+    image: mariadb:10.11
     restart: unless-stopped
     environment:
       MARIADB_USER: ${HARVESTER_DB_USER:-harvester}
@@ -203,7 +203,7 @@ services:
       MARIADB_DATABASE: ${HARVESTER_DB_NAME:-harvester_db}
       MARIADB_ROOT_PASSWORD: ${HARVESTER_DB_PASSWORD:-harvester_secret}
     volumes:
-      - harvester-db-data:/bitnami/mariadb
+      - harvester-db-data:/var/lib/mysql
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -u${HARVESTER_DB_USER:-harvester} -p${HARVESTER_DB_PASSWORD:-harvester_secret} --silent"]
       interval: 10s
