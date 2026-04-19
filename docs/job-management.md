@@ -34,7 +34,7 @@ On success a single integer job ID is printed to stdout.
 
 | Option | Default | Description |
 |---|---|---|
-| `--site SITE` | *(required)* | PanDA compute site / queue name |
+| `--site SITE` | `PANDA_COMPOSE_LOCAL` | PanDA compute site / queue name |
 | `--transformation PATH` | — | Binary to execute **inside the harvester container** |
 | `--script PATH` | — | Script on the **host** filesystem (not available inside container — use `--transformation` instead) |
 | `--params STRING` | `""` | Arguments passed to the transformation |

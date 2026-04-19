@@ -39,7 +39,7 @@ Docker Compose pulls all images on the first run. Startup takes 1–2 minutes.
 ```
 
 This polls `http://localhost:25080/server/panda/isAlive` until it returns `alive=yes`
-(default timeout: 5 minutes). JEDI becomes healthy ~30 s after the server.
+(default timeout: 120 seconds). JEDI becomes healthy ~30 s after the server.
 
 ## 5. Submit a test job
 

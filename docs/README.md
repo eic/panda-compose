@@ -20,7 +20,7 @@ This repository mirrors the component set of
 | `mariadb` | `mariadb:10.11` | Harvester database |
 | `harvester` | `ghcr.io/hsf/harvester:latest` | Resource-facing pilot submission service |
 
-Startup order: `postgres` + `activemq` + `mariadb` → `init` (one-shot) → `panda-server` → `panda-jedi` + `harvester`
+Startup order: `postgres` + `activemq` + `mariadb` → `panda-server` → `init` (one-shot) → `panda-jedi` + `harvester`
 
 ## Quick start
 
