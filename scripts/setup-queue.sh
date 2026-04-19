@@ -48,6 +48,16 @@ ENDOFSQL
 psql -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA atlas_panda TO ${PANDA_DB_USER};"
 echo "atlas_panda schema alias created."
 
+# Step 1b: insert the JEDI schema version row so SchemaChecker.py succeeds on a fresh DB.
+# The checker queries: SELECT major||'.'||minor||'.'||patch FROM ATLAS_PANDA.pandadb_version
+# WHERE component = 'JEDI'.  Without this row it raises IndexError and JEDI never starts.
+echo "Inserting JEDI schema version row..."
+psql -v ON_ERROR_STOP=1 -c \
+  "INSERT INTO doma_panda.pandadb_version (component, major, minor, patch)
+   VALUES ('JEDI', 0, 0, 24)
+   ON CONFLICT (component) DO NOTHING;"
+echo "JEDI schema version row inserted."
+
 # Step 2: register PANDA_COMPOSE_LOCAL queue using the panda user credentials.
 export PGPASSWORD="${PANDA_DB_PASSWORD:-panda_secret}"
 export PGUSER="${PANDA_DB_USER}"

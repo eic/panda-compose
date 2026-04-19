@@ -23,10 +23,23 @@ jobs:
       - name: Wait for PanDA server to become healthy
         run: ./scripts/healthcheck.sh 300
 
-      - name: Verify JEDI is running
+      - name: Wait for JEDI to become healthy
         run: |
-          docker compose ps panda-jedi
-          docker compose logs panda-jedi --tail=20
+          echo "Waiting for JEDI to become healthy (timeout 120s)..."
+          DEADLINE=$((SECONDS + 120))
+          STATUS="unknown"
+          while [[ $SECONDS -lt $DEADLINE ]]; do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' panda-compose-panda-jedi-1 2>/dev/null || echo "not_found")
+            echo "  JEDI health: $STATUS"
+            [[ "$STATUS" == "healthy" ]] && break
+            sleep 10
+          done
+          if [[ "$STATUS" != "healthy" ]]; then
+            docker compose logs panda-jedi --tail=50
+            echo "ERROR: JEDI did not become healthy within 2 minutes (status: $STATUS)"
+            exit 1
+          fi
+          echo "JEDI is healthy."
 
       - name: Verify Harvester is running
         run: |

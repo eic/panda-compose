@@ -164,6 +164,8 @@ services:
     depends_on:
       panda-server:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
     environment:
       PANDA_DB_BACKEND: ${PANDA_DB_BACKEND:-postgres}
       PANDA_DB_HOST: ${PANDA_DB_HOST:-postgres}
