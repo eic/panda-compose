@@ -33,8 +33,11 @@ except ImportError as exc:
 
 def parse_args():
     p = argparse.ArgumentParser(description="Submit a job script to PanDA")
-    p.add_argument("--site", required=True, help="PanDA compute site (queue name)")
-    p.add_argument("--script", required=True, help="Path to the job script to execute")
+    p.add_argument("--site", default="PANDA_COMPOSE_LOCAL", help="PanDA compute site (queue name)")
+    group = p.add_mutually_exclusive_group(required=True)
+    group.add_argument("--script", help="Path to a bash script to execute (must be accessible inside the worker container)")
+    group.add_argument("--transformation", help="Executable to run directly (e.g. /bin/echo)")
+    p.add_argument("--params", default="", help="Job parameters string (used with --transformation)")
     p.add_argument("--name", default="panda-compose-job", help="Job name")
     p.add_argument("--cores", type=int, default=1, help="Number of CPU cores")
     p.add_argument("--memory", type=int, default=2000, help="Memory in MB")
@@ -45,16 +48,22 @@ def parse_args():
 def main():
     args = parse_args()
 
-    script_path = os.path.abspath(args.script)
-    if not os.path.isfile(script_path):
-        print(f"ERROR: script not found: {script_path}", file=sys.stderr)
-        sys.exit(1)
+    if args.script:
+        script_path = os.path.abspath(args.script)
+        if not os.path.isfile(script_path):
+            print(f"ERROR: script not found: {script_path}", file=sys.stderr)
+            sys.exit(1)
+        transformation = "/bin/bash"
+        job_params = script_path
+    else:
+        transformation = args.transformation
+        job_params = args.params
 
     job = JobSpec.JobSpec()
     job.jobName = args.name
     job.computingSite = args.site
-    job.transformation = "/bin/bash"
-    job.jobParameters = script_path
+    job.transformation = transformation
+    job.jobParameters = job_params
     job.prodSourceLabel = "test"
     job.processingType = "panda-compose"
     job.maxCpuCount = args.cores

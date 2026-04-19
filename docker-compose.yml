@@ -84,6 +84,11 @@ services:
           ln -sf /opt/panda/sandbox/panda_server-httpd.conf /opt/panda/etc/panda/panda_server-httpd.conf
         fi
         /opt/panda/bin/python /data/panda/process_template.py
+        # Remove stale lock files left by a previous container run (the writable
+        # layer is reused across restarts so these files persist).
+        rm -f ${PANDA_LOCK_DIR:-/var/run/panda}/panda_daemon.lock \
+              ${PANDA_LOCK_DIR:-/var/run/panda}/panda_daemon.pid \
+              ${PANDA_LOCK_DIR:-/var/run/panda}/panda_daemon.pid.lock
         /data/panda/run-panda-services
         sleep infinity & wait
     depends_on:
@@ -159,6 +164,8 @@ services:
     depends_on:
       panda-server:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
     environment:
       PANDA_DB_BACKEND: ${PANDA_DB_BACKEND:-postgres}
       PANDA_DB_HOST: ${PANDA_DB_HOST:-postgres}
@@ -175,12 +182,15 @@ services:
       PANDA_ACTIVEMQ_PASSWD_panda: ${PANDA_ACTIVEMQ_PASSWD_panda:-panda_mq_secret}
       PANDA_ACTIVEMQ_PASSWD_jedi: ${PANDA_ACTIVEMQ_PASSWD_jedi:-jedi_mq_secret}
       PANDA_NO_ROOT: "1"
+      PYTHONPATH: /opt/panda/lib/python3.11/site-packages/pandacommon
       PANDA_URL: ${PANDA_URL:-http://panda-server:80/server/panda}
       PANDA_URL_SSL: ${PANDA_URL_SSL:-https://panda-server:443/server/panda}
       PANDA_VERIFY_HOST: "off"
       http_proxy: ${HTTP_PROXY:-}
       https_proxy: ${HTTPS_PROXY:-}
     volumes:
+      - ./config/panda/panda_common.cfg:/etc/panda/panda_common.cfg:ro
+      - ./config/panda/panda_server.cfg:/etc/panda/panda_server.cfg:ro
       - ./config/panda/panda_jedi.cfg:/etc/panda/panda_jedi.cfg:ro
       - ./config/jedi/sandbox:/opt/panda/sandbox:ro
       - panda-jedi-logs:/var/log/panda
@@ -211,20 +221,60 @@ services:
       retries: 10
 
   # ────────────────────────────────────────────────────────────────
-  # Harvester — resource-facing pilot submission service
+  # Init — one-shot service that registers PANDA_COMPOSE_LOCAL in
+  # the PanDA server schedconfig so JEDI can route jobs to it.
+  # Runs after panda-server is healthy; exits 0 on success.
+  # ────────────────────────────────────────────────────────────────
+  init:
+    image: postgres:15
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      panda-server:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/scripts:ro
+    command:
+      - /bin/bash
+      - /scripts/setup-queue.sh
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres_secret}
+      PGDATABASE: ${PANDA_DB_NAME:-panda_db}
+      PANDA_DB_USER: panda
+      PANDA_DB_PASSWORD: ${PANDA_DB_PASSWORD:-panda_secret}
+
+  # ────────────────────────────────────────────────────────────────
+  # Harvester — resource-facing pilot submission service.
+  # Runs subprocess_submitter / subprocess_monitor plugins (mounted
+  # from ./scripts/) so jobs execute as local subprocesses with no
+  # external batch system required.
   # ────────────────────────────────────────────────────────────────
   harvester:
     image: ghcr.io/hsf/harvester:latest
     restart: unless-stopped
+    command:
+      - /bin/bash
+      - -c
+      - |
+        source /opt/harvester/bin/activate
+        mkdir -p /var/log/harvester /var/run/panda /harvester/workers
+        exec python -u $$SITE_PACKAGES_PATH/pandaharvester/harvesterbody/master.py --foreground
     depends_on:
       panda-server:
         condition: service_healthy
       mariadb:
         condition: service_healthy
     environment:
+      VIRTUAL_ENV: /opt/harvester
+      SITE_PACKAGES_PATH: /opt/harvester/lib/python3.11/site-packages
+      PYTHONPATH: /harvester/plugins:/opt/harvester/lib/python3.11/site-packages/pandacommon
       PANDA_URL: ${PANDA_URL:-http://panda-server:80/server/panda}
-      PANDA_URL_SSL: ${PANDA_URL_SSL:-https://panda-server:443/server/panda}
-      PANDA_AUTH: ${PANDA_AUTH:-None}
+      PANDA_URL_SSL: ${PANDA_URL_SSL:-http://panda-server:80/server/panda}
+      PANDA_AUTH: "None"
       PANDA_VERIFY_HOST: "off"
       HARVESTER_DB_USER: ${HARVESTER_DB_USER:-harvester}
       HARVESTER_DB_PASSWORD: ${HARVESTER_DB_PASSWORD:-harvester_secret}
@@ -234,8 +284,12 @@ services:
       http_proxy: ${HTTP_PROXY:-}
       https_proxy: ${HTTPS_PROXY:-}
     volumes:
-      - ./config/harvester/panda_harvester.cfg:/etc/harvester/panda_harvester.cfg:ro
+      - ./config/harvester/panda_harvester.cfg:/etc/panda/panda_harvester.cfg:ro
+      - ./config/harvester/panda_common.cfg:/etc/panda/panda_common.cfg:ro
       - ./config/harvester/panda_queues.cfg:/etc/harvester/panda_queues.cfg:ro
+      - ./scripts/subprocess_submitter.py:/harvester/plugins/subprocess_submitter.py:ro
+      - ./scripts/subprocess_monitor.py:/harvester/plugins/subprocess_monitor.py:ro
+      - ./scripts/panda-worker.sh:/harvester/panda-worker.sh:ro
       - harvester-logs:/var/log/harvester
       - harvester-workdir:/harvester
 

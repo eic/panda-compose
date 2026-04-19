@@ -23,10 +23,23 @@ jobs:
       - name: Wait for PanDA server to become healthy
         run: ./scripts/healthcheck.sh 300
 
-      - name: Verify JEDI is running
+      - name: Wait for JEDI to become healthy
         run: |
-          docker compose ps panda-jedi
-          docker compose logs panda-jedi --tail=20
+          echo "Waiting for JEDI to become healthy (timeout 120s)..."
+          DEADLINE=$((SECONDS + 120))
+          STATUS="unknown"
+          while [[ $SECONDS -lt $DEADLINE ]]; do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' panda-compose-panda-jedi-1 2>/dev/null || echo "not_found")
+            echo "  JEDI health: $STATUS"
+            [[ "$STATUS" == "healthy" ]] && break
+            sleep 10
+          done
+          if [[ "$STATUS" != "healthy" ]]; then
+            docker compose logs panda-jedi --tail=50
+            echo "ERROR: JEDI did not become healthy within 2 minutes (status: $STATUS)"
+            exit 1
+          fi
+          echo "JEDI is healthy."
 
       - name: Verify Harvester is running
         run: |
@@ -54,7 +67,7 @@ jobs:
 
           echo "=== Submitting job ==="
           JOB_ID=$(python3 scripts/pandajob-submit \
-            --site TEST_SITE \
+            --site PANDA_COMPOSE_LOCAL \
             --script /tmp/panda_ci_test.sh \
             --name ci-integration-test)
           echo "Submitted PanDA job ID: $JOB_ID"
@@ -64,26 +77,30 @@ jobs:
             exit 1
           fi
 
-          echo "=== Querying status ==="
-          STATUS_JSON=$(python3 scripts/pandajob-status "$JOB_ID")
-          echo "Status: $STATUS_JSON"
+          echo "=== Waiting for job to reach finished/failed (timeout 5 min) ==="
+          DEADLINE=$((SECONDS + 300))
+          while [[ $SECONDS -lt $DEADLINE ]]; do
+            STATUS_JSON=$(python3 scripts/pandajob-status "$JOB_ID")
+            JOB_STATUS=$(echo "$STATUS_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['jobStatus'])")
+            echo "[$(date -u '+%H:%M:%S')] Job status: $JOB_STATUS"
+            case "$JOB_STATUS" in
+              finished)
+                echo "OK: job reached 'finished'"
+                break
+                ;;
+              failed|cancelled)
+                echo "ERROR: job ended in terminal state '$JOB_STATUS'"
+                echo "$STATUS_JSON"
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
 
-          JOB_STATUS=$(echo "$STATUS_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['jobStatus'])")
-          echo "Job status: $JOB_STATUS"
-
-          case "$JOB_STATUS" in
-            defined|waiting|assigned|activated|sent|starting|running|merging|transferring|finished|failed|cancelled)
-              echo "OK: job status '$JOB_STATUS' is a valid PanDA state"
-              ;;
-            *)
-              echo "ERROR: unexpected job status '$JOB_STATUS'"
-              exit 1
-              ;;
-          esac
-
-          echo "=== Killing job ==="
-          python3 scripts/pandajob-kill "$JOB_ID"
-          echo "Kill command completed (job may already be terminal)"
+          if [[ "$JOB_STATUS" != "finished" ]]; then
+            echo "ERROR: job did not reach 'finished' within 5 minutes (last status: $JOB_STATUS)"
+            exit 1
+          fi
 
       - name: Tear down
         if: always()

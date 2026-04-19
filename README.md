@@ -126,8 +126,20 @@ echo "Submitted PanDA job $JOB_ID"
 | `--memory MB` | Memory in MB (default: 2000) |
 | `--walltime S` | Wall-clock limit in seconds (default: 3600) |
 
-On success a single integer job ID is printed to stdout. In the dev stack without a
-real compute backend the job will move to `failed` immediately — that is expected.
+On success a single integer job ID is printed to stdout.
+
+### Job lifecycle
+
+Jobs submitted to `PANDA_COMPOSE_LOCAL` run end-to-end through the full PanDA stack:
+
+```
+defined → activated → running → transferring → finished
+```
+
+Harvester picks up activated jobs (~30 s), launches them as local subprocesses
+inside the harvester container, and reports the result back to PanDA server.
+A trivial job typically completes in 1–2 minutes. The job reaches `finished`
+status once the adder daemon has processed the job output report.
 
 ### Query job status
 
@@ -140,7 +152,7 @@ Prints a JSON object to stdout:
 ```json
 {
   "jobID": 7,
-  "jobStatus": "failed",
+  "jobStatus": "finished",
   "exeErrorCode": 0,
   "exeErrorDiag": "",
   "pilotErrorCode": 0,
