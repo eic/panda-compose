@@ -1,9 +1,6 @@
 name: 'Setup PanDA'
 description: >
-  Start a self-contained PanDA server stack (panda-server, panda-jedi, harvester,
-  postgres, activemq, mariadb) via Docker Compose and wait for it to become healthy.
-  Sets PANDA_URL, PANDA_URL_SSL, X509_USER_PROXY, PANDA_COMPOSE_PROJECT, and
-  PANDA_COMPOSE_DIR in the environment for subsequent steps.
+  Start a self-contained PanDA server stack via Docker Compose.
 
 author: 'eic'
 
