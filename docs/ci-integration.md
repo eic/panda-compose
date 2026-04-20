@@ -3,6 +3,19 @@
 panda-compose is designed to be used as a service in GitHub Actions workflows,
 allowing you to test tools that submit jobs to PanDA against a real (local) server.
 
+## Using the setup-panda action
+
+The simplest way to integrate PanDA in your CI is with the reusable composite action:
+
+```yaml
+- name: Setup PanDA
+  uses: eic/panda-compose@main
+```
+
+This single step starts the full stack and waits for it to be healthy. See
+[Setup PanDA Action](setup-panda-action.md) for the full reference including inputs,
+outputs, environment variables, and the required teardown step.
+
 ## Built-in smoke test
 
 The repository's own CI workflow (`.github/workflows/ci.yml`) exercises the full
