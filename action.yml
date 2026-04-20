@@ -1,0 +1,103 @@
+name: 'Setup PanDA'
+description: >
+  Start a self-contained PanDA server stack (panda-server, panda-jedi, harvester,
+  postgres, activemq, mariadb) via Docker Compose and wait for it to become healthy.
+  Sets PANDA_URL, PANDA_URL_SSL, X509_USER_PROXY, PANDA_COMPOSE_PROJECT, and
+  PANDA_COMPOSE_DIR in the environment for subsequent steps.
+
+author: 'eic'
+
+branding:
+  icon: 'server'
+  color: 'blue'
+
+inputs:
+  ref:
+    description: 'Git ref (branch, tag, SHA) of eic/panda-compose to check out'
+    default: 'main'
+  timeout:
+    description: 'Seconds to wait for the PanDA server to become healthy'
+    default: '300'
+  project-name:
+    description: >
+      Docker Compose project name. Determines container name prefixes
+      (e.g. <project-name>-panda-jedi-1). Change only if the default
+      conflicts with other services on the runner.
+    default: 'panda-compose'
+  env-overrides:
+    description: >
+      Newline-separated KEY=VALUE pairs appended to the .env file before
+      the stack starts. Use this to override default passwords or ports.
+    default: ''
+
+outputs:
+  panda-url:
+    description: 'HTTP URL of the PanDA REST API'
+    value: 'http://localhost:25080/server/panda'
+  panda-url-ssl:
+    description: 'URL for SSL PanDA REST API (same as HTTP in the dev stack)'
+    value: 'http://localhost:25080/server/panda'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check out eic/panda-compose
+      uses: actions/checkout@v4
+      with:
+        repository: eic/panda-compose
+        ref: ${{ inputs.ref }}
+        path: __panda_compose__
+
+    - name: Configure environment
+      shell: bash
+      run: |
+        cp __panda_compose__/.env.example __panda_compose__/.env
+        if [[ -n "${{ inputs.env-overrides }}" ]]; then
+          printf '%s\n' "${{ inputs.env-overrides }}" >> __panda_compose__/.env
+        fi
+
+    - name: Start PanDA stack
+      shell: bash
+      run: |
+        docker compose \
+          -f __panda_compose__/docker-compose.yml \
+          -p ${{ inputs.project-name }} \
+          up -d
+
+    - name: Wait for PanDA server
+      shell: bash
+      run: |
+        __panda_compose__/scripts/healthcheck.sh ${{ inputs.timeout }}
+
+    - name: Wait for JEDI
+      shell: bash
+      run: |
+        echo "Waiting for JEDI to become healthy (timeout 120s)..."
+        DEADLINE=$((SECONDS + 120))
+        STATUS="unknown"
+        while [[ $SECONDS -lt $DEADLINE ]]; do
+          STATUS=$(docker inspect \
+            --format='{{.State.Health.Status}}' \
+            ${{ inputs.project-name }}-panda-jedi-1 2>/dev/null || echo "not_found")
+          echo "  JEDI health: $STATUS"
+          [[ "$STATUS" == "healthy" ]] && break
+          sleep 10
+        done
+        if [[ "$STATUS" != "healthy" ]]; then
+          docker compose \
+            -f __panda_compose__/docker-compose.yml \
+            -p ${{ inputs.project-name }} \
+            logs panda-jedi --tail=50
+          echo "ERROR: JEDI did not become healthy within 2 minutes (status: $STATUS)"
+          exit 1
+        fi
+        echo "JEDI is healthy."
+
+    - name: Export environment variables
+      shell: bash
+      run: |
+        echo "PANDA_URL=http://localhost:25080/server/panda"         >> "$GITHUB_ENV"
+        echo "PANDA_URL_SSL=http://localhost:25080/server/panda"     >> "$GITHUB_ENV"
+        echo "X509_USER_PROXY=/dev/null"                             >> "$GITHUB_ENV"
+        echo "PANDA_COMPOSE_PROJECT=${{ inputs.project-name }}"      >> "$GITHUB_ENV"
+        echo "PANDA_COMPOSE_DIR=__panda_compose__"                   >> "$GITHUB_ENV"
