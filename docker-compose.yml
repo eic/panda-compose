@@ -261,13 +261,23 @@ services:
       - -c
       - |
         source /opt/harvester/bin/activate
+        pip install -q docker
+        chmod 666 /var/run/docker.sock || true
         mkdir -p /var/log/harvester /var/run/panda /harvester/workers
-        exec python -u $$SITE_PACKAGES_PATH/pandaharvester/harvesterbody/master.py --foreground
+        python -u $$SITE_PACKAGES_PATH/pandaharvester/harvesterbody/master.py --foreground &
+        echo $$! > /var/run/panda/panda_harvester.pid
+        wait
     depends_on:
       panda-server:
         condition: service_healthy
       mariadb:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 $$(cat /var/run/panda/panda_harvester.pid 2>/dev/null) 2>/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     environment:
       VIRTUAL_ENV: /opt/harvester
       SITE_PACKAGES_PATH: /opt/harvester/lib/python3.11/site-packages
@@ -289,7 +299,10 @@ services:
       - ./config/harvester/panda_queues.cfg:/etc/harvester/panda_queues.cfg:ro
       - ./scripts/subprocess_submitter.py:/harvester/plugins/subprocess_submitter.py:ro
       - ./scripts/subprocess_monitor.py:/harvester/plugins/subprocess_monitor.py:ro
+      - ./config/harvester/plugins/docker_submitter.py:/harvester/plugins/docker_submitter.py:ro
+      - ./config/harvester/plugins/docker_monitor.py:/harvester/plugins/docker_monitor.py:ro
       - ./scripts/panda-worker.sh:/harvester/panda-worker.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - harvester-logs:/var/log/harvester
       - harvester-workdir:/harvester
 

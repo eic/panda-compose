@@ -38,6 +38,11 @@ def parse_args():
     group.add_argument("--script", help="Path to a bash script to execute (must be accessible inside the worker container)")
     group.add_argument("--transformation", help="Executable to run directly (e.g. /bin/echo)")
     p.add_argument("--params", default="", help="Job parameters string (used with --transformation)")
+    p.add_argument("--container", default=None, metavar="IMAGE",
+                   help="Container image to run the job in (e.g. python:3.12-alpine). "
+                        "Sets job.container_name, mirroring PanDA's per-job container field. "
+                        "The Harvester DockerSubmitter reads this and falls back to the "
+                        "queue-level default when not specified.")
     p.add_argument("--name", default="panda-compose-job", help="Job name")
     p.add_argument("--cores", type=int, default=1, help="Number of CPU cores")
     p.add_argument("--memory", type=int, default=2000, help="Memory in MB")
@@ -64,6 +69,8 @@ def main():
     job.computingSite = args.site
     job.transformation = transformation
     job.jobParameters = job_params
+    if args.container:
+        job.container_name = args.container
     job.prodSourceLabel = "test"
     job.processingType = "panda-compose"
     job.maxCpuCount = args.cores

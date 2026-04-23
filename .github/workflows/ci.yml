@@ -9,7 +9,7 @@ on:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
@@ -27,6 +27,27 @@ jobs:
           docker compose -f $PANDA_COMPOSE_DIR/docker-compose.yml \
             -p $PANDA_COMPOSE_PROJECT logs harvester --tail=20
 
+      - name: Wait for Harvester healthy
+        run: |
+          echo "Waiting for Harvester to become healthy (timeout 300s)..."
+          DEADLINE=$((SECONDS + 300))
+          STATUS="unknown"
+          while [[ $SECONDS -lt $DEADLINE ]]; do
+            STATUS=$(docker inspect \
+              --format='{{.State.Health.Status}}' \
+              ${PANDA_COMPOSE_PROJECT}-harvester-1 2>/dev/null || echo "not_found")
+            echo "  Harvester health: $STATUS"
+            [[ "$STATUS" == "healthy" ]] && break
+            sleep 10
+          done
+          if [[ "$STATUS" != "healthy" ]]; then
+            docker compose -f $PANDA_COMPOSE_DIR/docker-compose.yml \
+              -p $PANDA_COMPOSE_PROJECT logs harvester --tail=50
+            echo "ERROR: Harvester did not become healthy within 300s (status: $STATUS)"
+            exit 1
+          fi
+          echo "Harvester is healthy."
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -38,13 +59,16 @@ jobs:
       - name: Integration test — submit, poll, query status
         run: |
           echo "=== Submitting job ==="
-          # Use --transformation with a binary that exists inside the harvester
-          # container. A --script path would point to the CI runner host, not the
-          # container, so the worker would fail with exit 127.
+          # Use --container to specify a per-job container image, mirroring PanDA's
+          # production container_name field. The DockerSubmitter reads this from
+          # job.jobParams["container_name"] and prefers it over the queue-level default.
+          # python:3.12-alpine is deliberately different from the queue default (alpine:latest)
+          # to prove per-job container selection is working.
           JOB_ID=$(python3 $PANDA_COMPOSE_DIR/scripts/pandajob-submit \
             --site PANDA_COMPOSE_LOCAL \
-            --transformation /bin/echo \
-            --params "CI integration test" \
+            --container python:3.12-alpine \
+            --transformation sh \
+            --params "-c 'echo hello from python:3.12-alpine; python3 --version; uname -a'" \
             --name ci-integration-test)
           echo "Submitted PanDA job ID: $JOB_ID"
 
