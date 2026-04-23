@@ -1,9 +1,15 @@
 """
 DockerSubmitter — Harvester submitter plugin that runs PanDA jobs inside Docker containers.
 
-Each worker maps to one detached container. The container image and Docker socket path are
-configurable via the queue config. Job command is derived from jobSpec.jobParams fields
-"transformation" (executable) and "jobPars" (argument string).
+Each worker maps to one detached container. The image is resolved in priority order:
+  1. job.jobParams["container_name"] — per-job image set by the submitter via
+     job.container_name (mirrors PanDA's production container_name field); any
+     leading "docker://" prefix is stripped for Docker SDK compatibility.
+  2. containerImage queue config key — the site-level default (e.g. "alpine:latest").
+
+The Docker socket path is configurable via the dockerSocket queue config key.
+Job command is derived from jobSpec.jobParams fields "transformation" (executable)
+and "jobPars" (argument string).
 
 Queue config example:
 
@@ -30,6 +36,22 @@ class DockerSubmitter(PluginBase):
         self.dockerSocket = "unix:///var/run/docker.sock"
         PluginBase.__init__(self, **kwarg)
 
+    def _resolve_image(self, job, wLog):
+        """Return the Docker image to use for this job.
+
+        Per-job container_name takes priority over the queue-level default.
+        Strips any leading "docker://" prefix so the Docker SDK gets a plain
+        registry reference (e.g. "docker://python:3.12-alpine" → "python:3.12-alpine").
+        """
+        per_job = job.jobParams.get("container_name", "").strip() if job else ""
+        if per_job:
+            image = per_job.removeprefix("docker://")
+            wLog.debug(f"using per-job container image={image} (from container_name)")
+        else:
+            image = self.containerImage
+            wLog.debug(f"using queue default container image={image}")
+        return image
+
     def submit_workers(self, workspec_list):
         tmpLog = self.make_logger(baseLogger, method_name="submit_workers")
         tmpLog.debug(f"start nWorkers={len(workspec_list)}")
@@ -52,13 +74,15 @@ class DockerSubmitter(PluginBase):
                     job_pars = job.jobParams.get("jobPars", "")
                     command = [transformation] + shlex.split(job_pars) if job_pars else [transformation]
                 else:
+                    job = None
                     command = ["sh", "-c", "echo 'no job spec available'"]
 
+                image = self._resolve_image(job, wLog)
                 container_name = f"harvester-worker-{workSpec.workerID}"
-                wLog.debug(f"running container image={self.containerImage} command={command}")
+                wLog.debug(f"running container image={image} command={command}")
 
                 container = client.containers.run(
-                    self.containerImage,
+                    image,
                     command=command,
                     name=container_name,
                     detach=True,

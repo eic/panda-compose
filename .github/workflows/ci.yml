@@ -59,13 +59,16 @@ jobs:
       - name: Integration test — submit, poll, query status
         run: |
           echo "=== Submitting job ==="
-          # Use --transformation with a binary that exists inside the harvester
-          # container. A --script path would point to the CI runner host, not the
-          # container, so the worker would fail with exit 127.
+          # Use --container to specify a per-job container image, mirroring PanDA's
+          # production container_name field. The DockerSubmitter reads this from
+          # job.jobParams["container_name"] and prefers it over the queue-level default.
+          # python:3.12-alpine is deliberately different from the queue default (alpine:latest)
+          # to prove per-job container selection is working.
           JOB_ID=$(python3 $PANDA_COMPOSE_DIR/scripts/pandajob-submit \
             --site PANDA_COMPOSE_LOCAL \
+            --container python:3.12-alpine \
             --transformation sh \
-            --params "-c 'echo hello from alpine; uname -a'" \
+            --params "-c 'echo hello from python:3.12-alpine; python3 --version; uname -a'" \
             --name ci-integration-test)
           echo "Submitted PanDA job ID: $JOB_ID"
 
