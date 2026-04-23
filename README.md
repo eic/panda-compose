@@ -111,7 +111,7 @@ export X509_USER_PROXY=/dev/null   # suppress grid-proxy noise in the dev stack
 
 ```bash
 JOB_ID=$(python3 scripts/pandajob-submit \
-    --site  TEST_SITE \
+    --site PANDA_COMPOSE_LOCAL \
     --script /path/to/myjob.sh \
     --name  my-test-job)
 echo "Submitted PanDA job $JOB_ID"
