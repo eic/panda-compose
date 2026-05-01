@@ -12,3 +12,4 @@
 * Integration
   * [CI Integration](ci-integration.md)
   * [Setup PanDA Action](setup-panda-action.md)
+  * [OCI Artifact](oci-artifact.md)

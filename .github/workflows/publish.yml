@@ -1,0 +1,55 @@
+name: Publish OCI Artifact
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - 'docker-compose.yml'
+      - '.env.example'
+      - 'config/**'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        # docker compose publish requires v2.34.0+; ensure a suitable version is present
+        run: |
+          COMPOSE_VERSION=v2.35.0
+          mkdir -p ~/.docker/cli-plugins
+          curl -sSL \
+            "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+            -o ~/.docker/cli-plugins/docker-compose
+          chmod +x ~/.docker/cli-plugins/docker-compose
+          docker compose version
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare .env
+        run: cp .env.example .env
+
+      - name: Publish compose file as OCI artifact (latest)
+        run: |
+          docker compose publish --yes ghcr.io/${{ github.repository }}:latest
+
+      - name: Publish compose file as OCI artifact (version tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker compose publish --yes ghcr.io/${{ github.repository }}:${{ github.ref_name }}
