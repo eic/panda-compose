@@ -2,7 +2,7 @@
 
 panda-compose publishes its `docker-compose.yml` as an OCI artifact to the
 [GitHub Container Registry](https://ghcr.io/eic/panda-compose) on every push to `main`
-and on every version tag.
+and on every version tag. It can also be triggered manually via `workflow_dispatch`.
 
 ## What is published
 
