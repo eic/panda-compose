@@ -1,0 +1,66 @@
+name: Publish OCI Artifact
+
+on:
+  push:
+    # Publish :latest on relevant changes to main; always publish on version tags.
+    # Note: GitHub's paths filter applies to both branches and tags, so we omit it here
+    # and let the workflow run on all pushes to main and all v* tags.
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Compose
+        # docker compose publish requires v2.34.0+; ensure a suitable version is present
+        run: |
+          COMPOSE_VERSION=v2.35.0
+          ARCH="$(uname -m)"
+          case "${ARCH}" in
+            x86_64)  COMPOSE_ARCH=x86_64  ;;
+            aarch64|arm64) COMPOSE_ARCH=aarch64 ;;
+            *) echo "Unsupported architecture: ${ARCH}" >&2; exit 1 ;;
+          esac
+          COMPOSE_DIR=~/.docker/cli-plugins
+          COMPOSE_BIN="${COMPOSE_DIR}/docker-compose"
+          mkdir -p "${COMPOSE_DIR}"
+          curl -sSL \
+            "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${COMPOSE_ARCH}" \
+            -o "${COMPOSE_BIN}"
+          curl -sSL \
+            "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/checksums.txt" \
+            -o /tmp/docker-compose-checksums.txt
+          grep " docker-compose-linux-${COMPOSE_ARCH}$" /tmp/docker-compose-checksums.txt | sha256sum -c -
+          chmod +x "${COMPOSE_BIN}"
+          docker compose version
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare .env
+        run: cp .env.example .env
+
+      - name: Publish compose file as OCI artifact (latest)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker compose publish --yes ghcr.io/${{ github.repository }}:latest
+
+      - name: Publish compose file as OCI artifact (version tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker compose publish --yes ghcr.io/${{ github.repository }}:${{ github.ref_name }}
