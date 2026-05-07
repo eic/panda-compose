@@ -22,6 +22,7 @@ Queue config example:
 """
 
 import shlex
+import uuid
 
 import docker as docker_module
 from pandaharvester.harvestercore import core_utils
@@ -78,7 +79,10 @@ class DockerSubmitter(PluginBase):
                     command = ["sh", "-c", "echo 'no job spec available'"]
 
                 image = self._resolve_image(job, wLog)
-                container_name = f"harvester-worker-{workSpec.workerID}"
+                # UUID suffix prevents name conflicts if Harvester retries with
+                # the same workerID.  The monitor uses batchID (container ID), not
+                # the name, so the suffix is transparent to it.
+                container_name = f"harvester-worker-{workSpec.workerID}-{uuid.uuid4().hex[:8]}"
                 wLog.debug(f"running container image={image} command={command}")
 
                 container = client.containers.run(

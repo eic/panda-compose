@@ -50,22 +50,34 @@ class DockerMonitor(PluginBase):
                 exit_code = container.attrs["State"].get("ExitCode", -1)
                 wLog.debug(f"container status={c_status} exit_code={exit_code}")
 
-                if c_status in ("created", "running"):
+                if c_status in ("created", "running", "restarting", "removing"):
                     new_status = WorkSpec.ST_running
+                    msg = ""
                 elif c_status == "exited":
                     if exit_code == 0:
                         new_status = WorkSpec.ST_finished
                         workSpec.nativeExitCode = 0
                         workSpec.nativeStatus = "exited(0)"
+                        msg = ""
                     else:
                         new_status = WorkSpec.ST_failed
                         workSpec.nativeExitCode = exit_code
                         workSpec.nativeStatus = f"exited({exit_code})"
+                        msg = f"container exited with code {exit_code}"
                 else:
                     new_status = WorkSpec.ST_failed
                     workSpec.nativeStatus = c_status
+                    msg = f"unexpected container status: {c_status}"
 
-                retList.append((new_status, ""))
+                # Remove terminal containers so they don't accumulate.
+                if new_status in (WorkSpec.ST_finished, WorkSpec.ST_failed):
+                    try:
+                        container.remove(force=True)
+                        wLog.debug(f"removed container id={workSpec.batchID[:12]}")
+                    except Exception as rm_exc:
+                        wLog.warning(f"failed to remove container {workSpec.batchID[:12]}: {rm_exc}")
+
+                retList.append((new_status, msg))
             except docker_module.errors.NotFound:
                 wLog.warning(f"container {workSpec.batchID[:12]} not found — treating as failed (container disappeared unexpectedly)")
                 retList.append((WorkSpec.ST_failed, "container not found"))
