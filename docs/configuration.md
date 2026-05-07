@@ -76,20 +76,33 @@ configuration to prevent the setupper and adder daemons from failing on every jo
 
 ### `config/harvester/panda_queues.cfg` — queue definition
 
-The `PANDA_COMPOSE_LOCAL` queue uses the subprocess plugins:
+The queue configuration is JSON. The `PANDA_COMPOSE_LOCAL` queue uses the Docker plugins:
 
-```ini
-[PANDA_COMPOSE_LOCAL]
-...
-submitter     = SubprocessSubmitter
-monitor       = SubprocessMonitor
-stager        = DummyStager
-messenger     = SharedFileMessenger
+```json
+"submitter": {
+  "name": "DockerSubmitter",
+  "module": "docker_submitter",
+  "containerImage": "alpine:latest",
+  "dockerSocket": "unix:///var/run/docker.sock"
+},
+"monitor": {
+  "name": "DockerMonitor",
+  "module": "docker_monitor"
+},
+"messenger": {
+  "name": "BaseMessenger",
+  "module": "pandaharvester.harvestermessenger.base_messenger",
+  "accessPoint": "/harvester/workers"
+},
+"stager": {
+  "name": "DummyStager",
+  "module": "pandaharvester.harvesterstager.dummy_stager"
+}
 ```
 
-To add a second queue (e.g., for a different experiment), add a new `[QUEUE_NAME]`
-section in `panda_queues.cfg` and register it in the database via a modified version
-of `scripts/setup-queue.sh`.
+To add a second queue (e.g., for a different experiment), add a new template entry
+and a corresponding site entry in `panda_queues.cfg` and register the site in the
+database via a modified version of `scripts/setup-queue.sh`.
 
 ## Ports
 

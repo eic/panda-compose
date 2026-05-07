@@ -139,18 +139,17 @@ start until the init container exits 0.
 ### harvester — job executor
 
 Uses `ghcr.io/hsf/harvester:latest`. In this stack, Harvester is configured to use
-lightweight subprocess plugins (no batch system required):
+Docker-based plugins that launch job containers on the host Docker daemon:
 
 | Plugin | File | Purpose |
 |---|---|---|
-| `SubprocessSubmitter` | `scripts/subprocess_submitter.py` | Launches `panda-worker.sh` as a local subprocess |
-| `SubprocessMonitor` | `scripts/subprocess_monitor.py` | Checks for `jobReport.json` to detect completion |
+| `DockerSubmitter` | `config/harvester/plugins/docker_submitter.py` | Starts one Docker container per worker; image from job `container_name` param or queue default (`alpine:latest`) |
+| `DockerMonitor` | `config/harvester/plugins/docker_monitor.py` | Polls container state; maps `exited(0)` → `ST_finished`, non-zero → `ST_failed` |
 | `DummyStager` | *(built-in)* | No-op output staging (no Rucio) |
-| `SharedFileMessenger` | *(built-in)* | File-based job description exchange |
+| `BaseMessenger` | *(built-in)* | Minimal messenger; `accessPoint` provides the worker working-directory root |
 
-The worker script (`scripts/panda-worker.sh`) parses the PanDA job descriptor
-(`pandaJobData.out`), runs the requested transformation binary, and writes
-`jobReport.json` with the exit code.
+The host Docker socket (`/var/run/docker.sock`) is bind-mounted into the harvester
+container so the `DockerSubmitter` plugin can call the Docker API directly.
 
 ## Job lifecycle
 
@@ -170,7 +169,7 @@ sequenceDiagram
     H->>S: getJobs()
     Note over S: sent
 
-    H->>H: launch panda-worker.sh
+    H->>H: docker run <image>
     Note over S: starting
 
     H->>S: updateJobs(running)
@@ -196,11 +195,35 @@ End-to-end timing for a trivial job (e.g., `/bin/echo`):
 | `transferring` → `finished` | up to 6 min (adder daemon loop interval) |
 | **Total** | **2–8 minutes** |
 
-## Subprocess plugin design
+## Docker plugin design
 
-The Harvester subprocess plugins are intentionally simple and self-contained.
-They are suitable for running short-lived test transformations inside the
-harvester container, not for production workloads.
+The Harvester Docker plugins run each job in its own container on the host Docker
+daemon. The harvester container has the Docker socket bind-mounted at
+`/var/run/docker.sock`.
+
+`docker_submitter.py`:
+- Receives a list of `WorkSpec` objects from Harvester
+- For each worker, calls `docker.run()` with the image from the job's
+  `container_name` parameter (falling back to the queue's `containerImage`)
+- Sets `batchID` to the Docker container ID for the monitor to track
+- Returns `ST_submitted` immediately; the container runs detached
+
+`docker_monitor.py`:
+- Receives a list of `WorkSpec` objects from Harvester
+- Looks up each container by `batchID`
+- Maps container state: `running`/`restarting` → `ST_running`;
+  `exited` with code 0 → `ST_finished`; `exited` with non-zero → `ST_failed`
+- Removes terminal containers automatically after status is recorded
+
+The transformation binary and parameters come from the PanDA job descriptor
+(`--transformation`, `--params`). Any Docker image reachable from the host can
+be used; specify it per-job with `--container IMAGE`.
+
+## Subprocess plugin design (secondary)
+
+The repository also includes simpler subprocess plugins that run jobs as
+subprocesses inside the harvester container itself. These are available in
+`scripts/` but are not the default queue configuration.
 
 `subprocess_submitter.py`:
 - Receives a list of `WorkSpec` objects from Harvester
@@ -218,7 +241,3 @@ harvester container, not for production workloads.
 - Sets `TRANSFORM` and `JOB_PARAMS` from the descriptor
 - Runs `exec $TRANSFORM $JOB_PARAMS`
 - On exit, writes `{"exitCode": N, "exitMsg": "..."}` to `jobReport.json`
-
-> **Note:** The `--transformation` value in job submission must refer to a binary
-> available **inside the harvester container**, not on the host. Use `/bin/echo`,
-> `/bin/true`, or a custom binary baked into a derived harvester image.
