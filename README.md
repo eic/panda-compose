@@ -1,8 +1,8 @@
 # panda-compose
 
-A self-contained Docker Compose stack for running a local PanDA workload management
-system. Designed for development and CI testing of tools that integrate with PanDA,
-such as CI executors, workflow managers, and custom Harvester plugins.
+A self-contained Docker Compose stack for running a local [PanDA](https://pandawms.org) workload management
+system. Designed for development and CI testing of tools that integrate with
+[PanDA](https://github.com/PanDAWMS/), such as CI executors, workflow managers, and custom Harvester plugins.
 
 This repository mirrors the component set of
 [panda-k8s](https://github.com/PanDAWMS/panda-k8s) but expressed as a single
@@ -72,8 +72,9 @@ Static configuration is mounted read-only into the containers:
 | `config/harvester/panda_harvester.cfg` | `/etc/harvester/panda_harvester.cfg` | Harvester main config |
 | `config/harvester/panda_queues.cfg` | `/etc/harvester/panda_queues.cfg` | Compute queue definitions |
 
-The default queue `PANDA_COMPOSE_LOCAL` uses Harvester's local submitter — suitable for
-submitting trivial test jobs on the same host (or within the compose network).
+The default queue `PANDA_COMPOSE_LOCAL` uses Harvester's `DockerSubmitter` — jobs run
+as Docker containers on the host Docker daemon. The default container image is
+`alpine:latest`; override per job with `--container IMAGE`.
 
 ## Relation to panda-k8s
 
@@ -112,7 +113,8 @@ export X509_USER_PROXY=/dev/null   # suppress grid-proxy noise in the dev stack
 ```bash
 JOB_ID=$(python3 scripts/pandajob-submit \
     --site PANDA_COMPOSE_LOCAL \
-    --script /path/to/myjob.sh \
+    --transformation sh \
+    --params "-c 'echo hello'" \
     --name  my-test-job)
 echo "Submitted PanDA job $JOB_ID"
 ```
@@ -120,7 +122,10 @@ echo "Submitted PanDA job $JOB_ID"
 | Option | Description |
 |---|---|
 | `--site SITE` | PanDA compute site / queue name (e.g. `TEST_SITE`, `PANDA_COMPOSE_LOCAL`) |
-| `--script PATH` | Path to the shell script to execute |
+| `--transformation PATH` | Executable to run inside the worker container |
+| `--params STRING` | Arguments passed to the transformation (default: `""`) |
+| `--container IMAGE` | Docker image for the job worker (overrides queue default `alpine:latest`) |
+| `--script PATH` | Script path (must be accessible inside the worker container) |
 | `--name NAME` | Human-readable job name (default: `panda-compose-job`) |
 | `--cores N` | CPU cores requested (default: 1) |
 | `--memory MB` | Memory in MB (default: 2000) |
@@ -133,11 +138,11 @@ On success a single integer job ID is printed to stdout.
 Jobs submitted to `PANDA_COMPOSE_LOCAL` run end-to-end through the full PanDA stack:
 
 ```
-defined → activated → running → transferring → finished
+defined → activated → sent → starting → running → transferring → finished
 ```
 
-Harvester picks up activated jobs (~30 s), launches them as local subprocesses
-inside the harvester container, and reports the result back to PanDA server.
+Harvester picks up activated jobs (~30 s), launches them as Docker containers
+on the host Docker daemon, and reports the result back to PanDA server.
 A trivial job typically completes in 1–2 minutes. The job reaches `finished`
 status once the adder daemon has processed the job output report.
 
@@ -176,5 +181,5 @@ Exits 0 even if the job is already in a terminal state.
 ## CI
 
 A GitHub Actions smoke-test workflow (`.github/workflows/ci.yml`) starts the full stack
-on every push and PR, runs the healthcheck, and exercises the full submit → status →
-kill job lifecycle.
+on every push and PR, submits a job in a Docker container, and polls until it reaches
+`finished`.

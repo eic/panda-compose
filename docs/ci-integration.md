@@ -24,7 +24,7 @@ stack on every push and pull request:
 1. Start the stack with `docker compose up -d`
 2. Wait for `panda-server` to become healthy (up to 5 min)
 3. Wait for `panda-jedi` to become healthy (up to 2 min)
-4. Submit a job with `/bin/echo`
+4. Submit a job in a `python:3.12-alpine` container (exercises per-job `--container` selection)
 5. Poll until the job reaches `finished` (up to 10 min)
 6. Tear down with `docker compose down -v`
 

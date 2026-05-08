@@ -35,18 +35,20 @@ On success a single integer job ID is printed to stdout.
 | Option | Default | Description |
 |---|---|---|
 | `--site SITE` | `PANDA_COMPOSE_LOCAL` | PanDA compute site / queue name |
-| `--transformation PATH` | — | Binary to execute **inside the harvester container** |
-| `--script PATH` | — | Script on the **host** filesystem (not available inside container — use `--transformation` instead) |
+| `--transformation PATH` | — | Binary to execute inside the worker container |
+| `--script PATH` | — | Script path (must be accessible inside the worker container) |
 | `--params STRING` | `""` | Arguments passed to the transformation |
+| `--container IMAGE` | *(queue default)* | Docker image for the job worker (e.g. `python:3.12-alpine`) |
 | `--name NAME` | `panda-compose-job` | Human-readable job label |
 | `--cores N` | `1` | CPU cores requested |
 | `--memory MB` | `2000` | Memory in MB |
 | `--walltime S` | `3600` | Wall-clock limit in seconds |
 
-> **Important:** The `--transformation` value must be a path to a binary that exists
-> **inside the harvester container**, not on the host. Common safe choices:
-> `/bin/echo`, `/bin/true`, `/bin/sleep`. Custom binaries can be provided by building
-> a derived harvester image or by bind-mounting a script into the container.
+> **Host Docker daemon:** Each job runs in its own Docker container on the host daemon.
+> The default image is `alpine:latest` (set in `panda_queues.cfg`); override it
+> per job with `--container IMAGE`. The `--transformation` value must be a binary
+> available in the chosen container image. Common safe choices: `sh` (with
+> `--params "-c 'your command'"`), `/bin/echo`, `/bin/true`.
 
 ## Query job status
 
