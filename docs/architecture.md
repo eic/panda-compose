@@ -151,6 +151,14 @@ Docker-based plugins that launch job containers on the host Docker daemon:
 The host Docker socket (`/var/run/docker.sock`) is bind-mounted into the harvester
 container so the `DockerSubmitter` plugin can call the Docker API directly.
 
+> [!WARNING]
+> Mounting the host Docker socket into the Harvester container effectively gives
+> Harvester root-equivalent control over the host through the Docker daemon. Any
+> job image started via this path can potentially affect the host as well. Only
+> run this stack on trusted machines, avoid untrusted images, and treat job
+> container selection (for example the job `container_name` parameter / any
+> `--container` input) as privileged input.
+
 ## Job lifecycle
 
 ```mermaid
