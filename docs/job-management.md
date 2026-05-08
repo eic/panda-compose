@@ -36,7 +36,7 @@ On success a single integer job ID is printed to stdout.
 |---|---|---|
 | `--site SITE` | `PANDA_COMPOSE_LOCAL` | PanDA compute site / queue name |
 | `--transformation PATH` | — | Binary to execute inside the worker container |
-| `--script PATH` | — | Script path (must be accessible inside the worker container) |
+| `--script FILE` | — | Shell script on the **host** filesystem; its content is inlined and run via `sh -c` inside the worker container |
 | `--params STRING` | `""` | Arguments passed to the transformation |
 | `--container IMAGE` | *(queue default)* | Docker image for the job worker (e.g. `python:3.12-alpine`) |
 | `--name NAME` | `panda-compose-job` | Human-readable job label |
@@ -44,11 +44,10 @@ On success a single integer job ID is printed to stdout.
 | `--memory MB` | `2000` | Memory in MB |
 | `--walltime S` | `3600` | Wall-clock limit in seconds |
 
-> **Host Docker daemon:** Each job runs in its own Docker container on the host daemon.
-> The default image is `alpine:latest` (set in `panda_queues.cfg`); override it
-> per job with `--container IMAGE`. The `--transformation` value must be a binary
-> available in the chosen container image. Common safe choices: `sh` (with
-> `--params "-c 'your command'"`), `/bin/echo`, `/bin/true`.
+> **Script execution:** `--script FILE` reads the file from the host and passes
+> its content as `sh -c '<content>'` inside the worker container.  No volume
+> mount is required; the script works with any container image that has `sh`.
+> Use `--container IMAGE` to select the image (default: `alpine:latest`).
 
 ## Query job status
 

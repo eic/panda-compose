@@ -4,6 +4,7 @@ pandajob-submit — submit a shell script as a PanDA job and print the job ID.
 
 Usage:
     pandajob-submit --site SITE --script SCRIPT [--name NAME]
+    pandajob-submit --site SITE --transformation EXEC [--params ARGS] [--name NAME]
 
 Environment:
     PANDA_URL        PanDA server URL (default: http://localhost:25080/server/panda)
@@ -14,8 +15,8 @@ Exit codes:
     1  submission failure
 """
 import argparse
-import json
 import os
+import shlex
 import sys
 
 # Allow override via environment for the dev stack.
@@ -35,7 +36,9 @@ def parse_args():
     p = argparse.ArgumentParser(description="Submit a job script to PanDA")
     p.add_argument("--site", default="PANDA_COMPOSE_LOCAL", help="PanDA compute site (queue name)")
     group = p.add_mutually_exclusive_group(required=True)
-    group.add_argument("--script", help="Path to a bash script to execute (must be accessible inside the worker container)")
+    group.add_argument("--script", metavar="FILE",
+                       help="Shell script on the host filesystem; its content is "
+                            "inlined and executed via 'sh -c' inside the worker container")
     group.add_argument("--transformation", help="Executable to run directly (e.g. /bin/echo)")
     p.add_argument("--params", default="", help="Job parameters string (used with --transformation)")
     p.add_argument("--container", default=None, metavar="IMAGE",
@@ -58,8 +61,13 @@ def main():
         if not os.path.isfile(script_path):
             print(f"ERROR: script not found: {script_path}", file=sys.stderr)
             sys.exit(1)
-        transformation = "/bin/bash"
-        job_params = script_path
+        with open(script_path) as fh:
+            content = fh.read()
+        # Inline the script content as: sh -c '<content>'
+        # shlex.quote produces a correctly single-quoted POSIX string; the
+        # DockerSubmitter side calls shlex.split() which is the matching inverse.
+        transformation = "sh"
+        job_params = "-c " + shlex.quote(content)
     else:
         transformation = args.transformation
         job_params = args.params

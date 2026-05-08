@@ -123,10 +123,11 @@ Override defaults by writing a custom `.env` before `docker compose up -d`:
           docker compose up -d
 ```
 
-### Submitting a custom transformation
+### Submitting a custom script
 
-Any binary available **inside the harvester container** can be used as a transformation.
-The default image (`ghcr.io/hsf/harvester:latest`) provides standard Linux utilities.
+Use `--script` to run a host-side shell script inside the worker container.
+The script content is read from the host filesystem and passed inline to `sh -c`;
+no volume mount or `docker cp` is needed.
 
 ```yaml
       - name: Submit with custom script
@@ -135,22 +136,17 @@ The default image (`ghcr.io/hsf/harvester:latest`) provides standard Linux utili
           PANDA_URL_SSL: http://localhost:25080/server/panda
           X509_USER_PROXY: /dev/null
         run: |
-          # Copy a script into the running harvester container
-          docker cp my_test_script.sh panda-compose-harvester-1:/tmp/test.sh
-          docker exec panda-compose-harvester-1 chmod +x /tmp/test.sh
-
           JOB_ID=$(python3 panda-compose/scripts/pandajob-submit \
             --site PANDA_COMPOSE_LOCAL \
-            --transformation /tmp/test.sh \
+            --script my_test_script.sh \
+            --container python:3.12-alpine \
             --name my-custom-job)
           echo "Submitted job $JOB_ID"
 ```
 
-> **Why `--transformation` instead of `--script`?**
-> The `--script` option points to a path on the **host** filesystem.
-> The harvester worker runs **inside the harvester container**, where the host path
-> does not exist. Use `--transformation` with a container-side path, or copy your
-> script into the container with `docker cp` first.
+The `--container IMAGE` flag selects the Docker image the script runs in
+(default: `alpine:latest`).  Any image that provides `sh` works; the script
+content is passed as `sh -c '<content>'`.
 
 ## Timing guidance
 
@@ -182,8 +178,8 @@ JEDI was not healthy before the job was submitted. Add a JEDI health wait step
 (see pattern above) and ensure `timeout-minutes` is large enough.
 
 **Job reached `failed` (exit code 127):**
-The transformation binary does not exist inside the harvester container.
-Use `/bin/echo`, `/bin/true`, or copy your script in with `docker cp`.
+The transformation binary does not exist inside the worker container image.
+Use `/bin/echo`, `/bin/true`, or switch to `--script` with an appropriate `--container IMAGE`.
 
 **`docker inspect` returns `not_found`:**
 The container name `panda-compose-panda-jedi-1` depends on the Compose project name,
